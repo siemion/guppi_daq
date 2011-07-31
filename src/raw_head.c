@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     
 	int filepos=0;
 	size_t rv=0;
-	int by=0;
+	long unsigned int by=0;
     
     FILE *fil = NULL;   //input file
     FILE *partfil = NULL;  //partial file
@@ -125,6 +125,12 @@ int main(int argc, char *argv[]) {
 		 by = by + pf.sub.bytes_per_subint + gethlength(buf);
 		 if(vflag>=1) fprintf(stderr, "mjd %Lf\n", pf.hdr.MJD_epoch);
 		 if(vflag>=1) fprintf(stderr, "zen: %f\n\n", pf.sub.tel_zen);
+		 
+		 fprintf(stderr, "packetindex %Ld\n", gf.packetindex);
+		 fprintf(stderr, "packetsize: %d\n\n", gf.packetsize);
+		 fprintf(stderr, "n_packets %d\n", gf.n_packets);
+		 fprintf(stderr, "n_dropped: %d\n\n", gf.n_dropped);
+		 
 		 if (pf.sub.data) free(pf.sub.data);
          pf.sub.data  = (unsigned char *)malloc(pf.sub.bytes_per_subint);
 		 
@@ -144,9 +150,9 @@ int main(int argc, char *argv[]) {
 					 
 					 fwrite(buf, sizeof(char), gethlength(buf), partfil);  //write header
 					 fwrite(pf.sub.data, sizeof(char), pf.sub.bytes_per_subint, partfil);  //write data					 
-					 fclose(partfil);
-					 fclose(fil);
-  					 exit(0);
+					 //fclose(partfil);
+					 //fclose(fil);
+  					 //exit(0);
 
  			 }
 									
@@ -157,10 +163,10 @@ int main(int argc, char *argv[]) {
 		}
 
 	}
-		if(vflag>=1) fprintf(stderr, "bytes: %d\n",by);
+		if(vflag>=1) fprintf(stderr, "bytes: %ld\n",by);
 		if(vflag>=1) fprintf(stderr, "pos: %ld %d\n", ftell(fil),feof(fil));
 	
-	
+	fclose(partfil);
 	fclose(fil);
     exit(1);
 }

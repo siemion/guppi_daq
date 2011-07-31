@@ -128,6 +128,11 @@ int main(int argc, char *argv[]) {
 		 by = by + pf.sub.bytes_per_subint + gethlength(buf);
 		 fprintf(stderr, "mjd %Lf\n", pf.hdr.MJD_epoch);
 		 fprintf(stderr, "zen: %f\n\n", pf.sub.tel_zen);
+		 
+		 fprintf(stderr, "packetindex %Ld\n", gf.packetindex);
+		 fprintf(stderr, "packetsize: %d\n\n", gf.packetsize);
+		 fprintf(stderr, "n_packets %d\n", gf.n_packets);
+		 fprintf(stderr, "n_dropped: %d\n\n", gf.n_dropped);
 
 		 if (pf.sub.data) {
 		 	printf("boo sub\n");
@@ -181,7 +186,7 @@ int main(int argc, char *argv[]) {
 					 
 					 printf("NBITS IS: %d\n", pf.hdr.nbits);
 					 //hputi4 (buf, "", pf.sub.bytes_per_subint/4);
-					 printf("wrote: %d\n",fwrite(buf, sizeof(char), gethlength(buf), partfil));  //write header
+					 printf("wrote: %d\n",(int) fwrite(buf, sizeof(char), gethlength(buf), partfil));  //write header
 					 z=0;
 
 
