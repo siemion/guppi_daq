@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
 		 if(vflag>=1) fprintf(stderr, "zen: %f\n\n", pf.sub.tel_zen);
 		 
 		 fprintf(stderr, "packetindex %Ld\n", gf.packetindex);
-		 fprintf(stderr, "packetsize: %d\n\n", gf.packetsize);
+		 fprintf(stderr, "packetsize: %d\n", gf.packetsize);
 		 fprintf(stderr, "n_packets %d\n", gf.n_packets);
 		 fprintf(stderr, "n_dropped: %d\n\n", gf.n_dropped);
 		 
