@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 
+
 /* Parse info from buffer into param struct */
 extern void guppi_read_obs_params(char *buf, 
                                      struct guppi_params *g,

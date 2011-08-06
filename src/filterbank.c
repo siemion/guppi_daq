@@ -27,6 +27,14 @@ int main(int argc, char *argv[]) {
     struct psrfits pf;
     char buf[32768];
     char partfilename[250]; //file name for first part of file
+
+
+    float quantlookup[4];
+	  quantlookup[0] = 3.3358750;
+	  quantlookup[1] = 1.0;
+	  quantlookup[2] = -1.0;
+	  quantlookup[3] = -3.3358750;    
+    
     
 	int filepos=0;
 	size_t rv=0;
@@ -126,13 +134,10 @@ int main(int argc, char *argv[]) {
 		 if(vflag>=1) fprintf(stderr, "mjd %Lf\n", pf.hdr.MJD_epoch);
 		 if(vflag>=1) fprintf(stderr, "zen: %f\n\n", pf.sub.tel_zen);
 		 
-		 fprintf(stderr, "%s packetindex %Ld\n", pf.basefilename, gf.packetindex);
-		 fprintf(stderr, "packetsize: %d\n", gf.packetsize);
+		 fprintf(stderr, "packetindex %Ld\n", gf.packetindex);
+		 fprintf(stderr, "packetsize: %d\n\n", gf.packetsize);
 		 fprintf(stderr, "n_packets %d\n", gf.n_packets);
-		 fprintf(stderr, "n_dropped: %d\n", gf.n_dropped);
-		 
-		 fprintf(stderr, "bytecnt: %d\n", pf.sub.bytes_per_subint);
-		 fprintf(stderr, "drop_frac_tot: %f\n\n", gf.drop_frac_tot);
+		 fprintf(stderr, "n_dropped: %d\n\n", gf.n_dropped);
 		 
 		 if (pf.sub.data) free(pf.sub.data);
          pf.sub.data  = (unsigned char *)malloc(pf.sub.bytes_per_subint);
@@ -149,9 +154,10 @@ int main(int argc, char *argv[]) {
 
 
 			 if(filepos == 0) {
-					 					 
-					 //fwrite(buf, sizeof(char), gethlength(buf), partfil);  //write header
-					 //fwrite(pf.sub.data, sizeof(char), pf.sub.bytes_per_subint, partfil);  //write data					 
+					 
+					 
+					 fwrite(buf, sizeof(char), gethlength(buf), partfil);  //write header
+					 fwrite(pf.sub.data, sizeof(char), pf.sub.bytes_per_subint, partfil);  //write data					 
 					 //fclose(partfil);
 					 //fclose(fil);
   					 //exit(0);
