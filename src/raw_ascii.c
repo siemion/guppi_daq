@@ -1,12 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "fitsio.h"
 #include "psrfits.h"
 #include "guppi_params.h"
 #include "fitshead.h"
 #include <math.h>
 #include <arpa/inet.h>
 #include <string.h>
+
+/* raw_ascii.c */
+/* output 2 or 8 bit complex raw voltage data from GUPPI as ASCII txt in the following 		*/
+/* format, where each value below is labeled by: 											*/
+/* time:channel:polarization:(r=real, i=imaginary)											*/
+/* e.g. "0:4:0:r" indicates time 0, channel 4, polarization 0, real part					*/
+/* or,	"0:4:0:i" indicates time 0, channel 4, polarization 0, imaginary part				*/
+/*																							*/
+/* for times 0 to M, channels 0 to N, polarizations 0 and 1 								*/
+/* 0:0:0:r, 0:0:0:i, 0:0:1:r, 0:0:1:i, 0:1:0:r, 0:1:0:i, 0:1:1:r, 0:1:1:i, ... , 0:N:1:i  	*/
+/* ...																						*/
+/* M:0:0:r, M:0:0:i, M:0:1:r, M:0:1:i, M:1:0:r, M:1:0:i, M:1:1:r, M:1:1:i, ... , M:N:1:i  	*/
+/*																							*/
+/*																							*/
+/* in other words, each line gives all samples for each time in channel order. 				*/
+/*																							*/
+
+
 
 
 /* Parse info from buffer into param struct */
@@ -15,35 +32,6 @@ extern void guppi_read_obs_params(char *buf,
                                      struct psrfits *p);
 double round(double x);
                        
-
-/* IMSWAP4 -- Reverse bytes of Integer*4 or Real*4 vector in place */
-void
-imswap4 (string,nbytes)
-
-char *string;   /* Address of Integer*4 or Real*4 vector */
-int nbytes;     /* Number of bytes to reverse */
-
-{
-    char *sbyte, *slast;
-    char temp0, temp1, temp2, temp3;
-
-    slast = string + nbytes;
-    sbyte = string;
-    while (sbyte < slast) {
-        temp3 = sbyte[0];
-        temp2 = sbyte[1];
-        temp1 = sbyte[2];
-        temp0 = sbyte[3];
-        sbyte[0] = temp0;
-        sbyte[1] = temp1;
-        sbyte[2] = temp2;
-        sbyte[3] = temp3;
-        sbyte = sbyte + 4;
-        }
-
-    return;
-}
-
           
               
 int main(int argc, char *argv[]) {
@@ -84,7 +72,7 @@ int main(int argc, char *argv[]) {
     unsigned int quantval;
 
     if(argc < 3) {
-		fprintf(stderr, "USAGE: %s input.raw output.fits (use 'stdout' for output if stdout is desired)\n", argv[0]);
+		fprintf(stderr, "USAGE: %s input.raw output.txt (use 'stdout' for output if stdout is desired)\n", argv[0]);
 		exit(1);
 	}
     
@@ -148,6 +136,8 @@ int main(int argc, char *argv[]) {
 			fflush(stdout);
 		 	free(fitsdata);         
 		 }
+		 
+		 /* allocate an array of floats for every sample in a sub integration */
 		 fitsdata = (char *) malloc(pf.sub.bytes_per_subint*4* (8/pf.hdr.nbits));
 		 
 		 fseek(fil, gethlength(buf), SEEK_CUR);
@@ -162,31 +152,15 @@ int main(int argc, char *argv[]) {
 
 
 			 if(filepos == 0) {
-					 //first time through, save first part of file
-
-					 //SIMPLE  =                    T / file does conform to FITS standard
-					 //BITPIX  =                    8 / number of bits per data pixel
-					 //NAXIS   =                    0 / number of data axes
+					 //first time through, output header
 					 
-					 for(x=0;x<26;x++) {
-					 	sprintf(keywrd, "FILL%d", x); 
-					 	hadd(buf, keywrd);
-					 }
-
-					 hadd(buf, "NAXIS2");
-					 hadd(buf, "NAXIS1");					 
-					 hadd(buf, "NAXIS");
-					 hadd(buf, "BITPIX");
-					 hadd(buf, "SIMPLE");
-					 hputc(buf, "SIMPLE", "T");
-					 hputi4(buf, "BITPIX", -32);
-					 hputi4(buf, "NAXIS", 2);
-					 hputi4(buf, "NAXIS1", pf.sub.bytes_per_subint * (8/pf.hdr.nbits));
-					 hputi4(buf, "NAXIS2", 1);
+					 //hputi4(buf, "NAXIS1", pf.sub.bytes_per_subint * (8/pf.hdr.nbits));
 					 
+					 fprintf(partfil, "Number of Channels: %d\n", pf.hdr.nchan);    
+					 /* output channel center frequencies */
+					 fprintf(partfil, "Start MJD: %Lf\n", pf.hdr.MJD_epoch);
+					 fprintf(partfil, "Number of bits: %d\n", pf.hdr.nbits);
 					 
-					 printf("NBITS IS: %d\n", pf.hdr.nbits);
-					 //hputi4 (buf, "", pf.sub.bytes_per_subint/4);
 					 printf("wrote: %d\n",(int) fwrite(buf, sizeof(char), gethlength(buf), partfil));  //write header
 					 z=0;
 
@@ -208,9 +182,6 @@ int main(int argc, char *argv[]) {
 
 								 memcpy(&fitsdata[z], &fitsval, sizeof(float));						 	
 							     z = z + 4;									 
-								 printf("%f\n", fitsval);							
-								 usleep(100000);
-						
 							 }
 						} else {						
 						 	fitsval = ((float) (signed char) pf.sub.data[x]) ;
@@ -219,8 +190,8 @@ int main(int argc, char *argv[]) {
 						}	
 
 
-					 	//printf("%f\n", fitsval);							
-						//usleep(100000);
+					 	printf("%f\n", fitsval);							
+						usleep(100000);
 
 							//printf("%f\n", fitsval);
 						 	//fitsval = (float) htonl((unsigned int) fitsval);

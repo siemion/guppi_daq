@@ -12,7 +12,9 @@
 #include <fftw3.h>
 
 
-
+/* samples per subint */
+/* (4 * 33046528) / (32 * 2 * 2)  == 1032704*/
+/* 128 * 3.2 * 10^-7s == 40.96 microseconds */
 
 
 /* Parse info from buffer into param struct */
@@ -35,21 +37,12 @@ struct gpu_input {
 	int invalid;
 	int curfile;
 	int overlap;   /* add this keyword here since it doesn't seem to appear in guppi_params.c */
-	long int first_file_skip; /* in case there's 8bit data in the header of file 0 */
 };
 
 float quantlookup[4];
 int ftacc;
 int spectraperint;
-int N = 8; //size of DFT on each GUPPI channel
-int overlap; // amount of overlap between sub integrations in samples
-
-
-int moment=2; //power to raise voltage to
-
-fftwf_complex *in, *out;
-fftwf_plan p;                 
-
+                                     
 int main(int argc, char *argv[]) {
 
 	struct guppi_params gf;
@@ -61,11 +54,7 @@ int main(int argc, char *argv[]) {
 
 
 	float **fastspectra;
-	
-
-	/* total number of channels in the filterbank - 256 channelized by guppi * second SW stage */
-	/* really should pull this out of the .raw files */	
-	int fnchan = 256 * N;  
+	int fnchan = 256;
 	
 	char filname[250];
 
@@ -75,14 +64,7 @@ int main(int argc, char *argv[]) {
 	long long int curindx;
 	int indxstep = 0;
 	
-	/* number of samples to sum in each spectra */
-
-	/* samples per subint */
-	/* (4 * 33046528) / (32 * 2 * 2)  == 1032704*/
-
-	/* 128 * 3.2 * 10^-7s == 40.96 microseconds */
 	ftacc = 128;
-	
 	quantlookup[0] = 3.3358750;
    	quantlookup[1] = 1.0;
    	quantlookup[2] = -1.0;
@@ -102,9 +84,8 @@ int main(int argc, char *argv[]) {
 	int i,j,k;
     int vflag=0; //verbose
     
-	for(i=0;i<8;i++) {band[i].file_prefix = NULL;band[i].fil = NULL;band[i].invalid = 0;band[i].first_file_skip = 0;}
-	
-	int first_good_band = -1;
+	for(i=0;i<8;i++) {band[i].file_prefix = NULL;band[i].fil = NULL;band[i].invalid = 0;}
+
 
 
     
@@ -116,7 +97,7 @@ int main(int argc, char *argv[]) {
 
        opterr = 0;
      
-       while ((c = getopt (argc, argv, "sVvi:o:1:2:3:4:5:6:7:8:")) != -1)
+       while ((c = getopt (argc, argv, "Vvi:o:1:2:3:4:5:6:7:8:")) != -1)
          switch (c)
            {
            case '1':
@@ -145,9 +126,6 @@ int main(int argc, char *argv[]) {
              break;
            case 'v':
              vflag = 1;
-             break;
-           case 's':
-             moment = 4;
              break;
            case 'V':
              vflag = 2;
@@ -197,80 +175,40 @@ int main(int argc, char *argv[]) {
 
 	for(i=0;i<8;i++) {
 		if(band[i].file_prefix == NULL) {
-			printf("WARNING no input stem for band%d\n", (i+1));
-			band[i].invalid = 1;
-			//return 1;
+			printf("must specify input directory for band%d\n", (i+1));
+			return 1;
 		}
 		j = 0;
-
-		
-		
-		if(band[i].invalid != 1) {
-			do {
-				sprintf(filname, "%s.%04d.raw",band[i].file_prefix,j);
-				printf("%s\n",filname);		
-				j++;
-			} while (exists(filname));
-			band[i].filecnt = j-1;
-			printf("%i\n",band[i].filecnt);
-			if(band[i].filecnt < 1) {
-				printf("no files for band %d\n",i);
-				band[i].invalid = 1;
-				
-			}
-	
-	
-			sprintf(filname, "%s.0000.raw", band[i].file_prefix);
-
-			band[i].fil = fopen(filname, "rb");
-			printf("file open %d\n" , band[i].fil);
+		do {
+			sprintf(filname, "%s.%04d.raw",band[i].file_prefix,j);
+			printf("%s\n",filname);		
+			j++;
+		} while (exists(filname));
+		band[i].filecnt = j-1;
+		if(band[i].filecnt < 0) {
+			printf("Must have at least one file for band %d\n",i);
+			return 1;
 		}
+		sprintf(filname, "%s.0000.raw", band[i].file_prefix);
 		
+		band[i].fil = fopen(filname, "rb");
+//		printf("file open %d\n" ,band[i].fil);
+
 		if(band[i].fil){
 			  if(fread(buf, sizeof(char), 32768, band[i].fil) == 32768){
-				   
-				   
-				   guppi_read_obs_params(buf, &band[i].gf, &band[i].pf);
-				   if(band[i].pf.hdr.nbits == 8) {
-					  
-					  fprintf(stderr, "got an 8bit header\n");
-					  
-					  /* figure out how the size of the first subint + header */
-				      band[i].first_file_skip = band[i].pf.sub.bytes_per_subint + gethlength(buf);
-						
-					  /* rewind to the beginning */	
-				   	  fseek(band[i].fil, -32768, SEEK_CUR);
-				   	  
-				   	  /* seek past the first subint + header */
-				   	  fseek(band[i].fil, band[i].first_file_skip, SEEK_CUR);
-
-					  /* read the next header */
-				   	  fread(buf, sizeof(char), 32768, band[i].fil);
-					  guppi_read_obs_params(buf, &band[i].gf, &band[i].pf);
-					  fclose(band[i].fil);
-
-				   } else {
-					  //fseek(band[i].fil, -32768, SEEK_CUR);
-		 
-					  fclose(band[i].fil);
-				   }
-	
-				   /* we'll use this band to set the params for the whole observation */
-				   if(first_good_band == -1) first_good_band = i;
-					
 				   lastvalid = i;
 				   printf("Band %d valid\n", i);
-	  			   
-
+	  
+				   fseek(band[i].fil, -32768, SEEK_CUR);
+	  
+				   fclose(band[i].fil);
 	  			   band[i].fil = NULL;
-
+				   guppi_read_obs_params(buf, &band[i].gf, &band[i].pf);
 				   hgeti4(buf, "OVERLAP", &band[i].overlap);
-
 				   //band[i].gf = gf;
 				   //band[i].pf = pf;
 				   //fclose(fil);
-					
-				 printf("BAND: %d packetindex %Ld\n", i, band[i].gf.packetindex);
+				   printf("BAND: %d packetindex %Ld\n", i, band[i].gf.packetindex);
 				   fprintf(stderr, "packetindex %Ld\n", band[i].gf.packetindex);
 				   fprintf(stderr, "packetsize: %d\n\n", band[i].gf.packetsize);
 				   fprintf(stderr, "n_packets %d\n", band[i].gf.n_packets);
@@ -304,8 +242,8 @@ int main(int argc, char *argv[]) {
 	ibeam = 0;
 	nbits=32;
 	obits=32;
-	tstart=band[first_good_band].pf.hdr.MJD_epoch;
-	tsamp = band[first_good_band].pf.hdr.dt * ftacc;
+	tstart=band[0].pf.hdr.MJD_epoch;
+	tsamp = band[0].pf.hdr.dt * ftacc;
 	nifs = 1;
 	src_raj=0.0;
 	src_dej=0.0;
@@ -314,44 +252,31 @@ int main(int argc, char *argv[]) {
     strcpy(ifstream,"YYYY");
 
 	memset(buf, 0x0, 32768);
-	strcat(buf, strtok(band[first_good_band].pf.hdr.ra_str, ":"));
+	strcat(buf, strtok(band[0].pf.hdr.ra_str, ":"));
 	strcat(buf, strtok((char *) 0, ":"));
 	strcat(buf, strtok((char *) 0, ":"));
 	src_raj = strtod(buf, (char **) NULL);
 	
 	memset(buf, 0x0, 32768);
-	strcat(buf, strtok(band[first_good_band].pf.hdr.dec_str, ":"));
+	strcat(buf, strtok(band[0].pf.hdr.dec_str, ":"));
 	strcat(buf, strtok((char *) 0, ":"));
 	strcat(buf, strtok((char *) 0, ":"));
 	src_dej = strtod(buf, (char **) NULL);
 
 
 
-	/* dump filterbank header */
+	/* egress filterbank header */
 	filterbank_header(partfil);
 	
-	in = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * N);
-	out = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * N);
-	p = fftwf_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_MEASURE);
-
 	
 	/* take important values from band 1 */
 	
-	/* number of packets that we *should* increment by */
-	indxstep = (int) ((band[first_good_band].pf.sub.bytes_per_subint * 4) / band[first_good_band].gf.packetsize) - (int) (band[first_good_band].overlap * band[first_good_band].pf.hdr.nchan * band[first_good_band].pf.hdr.rcvr_polns * 2 / band[first_good_band].gf.packetsize);
-	
-	//spectraperint = indxstep * band[first_good_band].gf.packetsize / (band[first_good_band].pf.hdr.nchan * band[first_good_band].pf.hdr.rcvr_polns * 2 * ftacc);
-	
-	/* total bytes per channel, which is equal to total samples per channel, divided by number of samples summed in each filterbank integration */					
-	spectraperint = ((band[first_good_band].pf.sub.bytes_per_subint / band[first_good_band].pf.hdr.nchan) - band[first_good_band].overlap) / ftacc;	
-	overlap = band[first_good_band].overlap;
-	
+	indxstep = (int) ((band[0].pf.sub.bytes_per_subint * 4) / band[0].gf.packetsize) - (int) (band[0].overlap * band[0].pf.hdr.nchan * band[0].pf.hdr.rcvr_polns * 2 / band[0].gf.packetsize);
 
-	
+	spectraperint = indxstep * band[0].gf.packetsize / (band[0].pf.hdr.nchan * band[0].pf.hdr.rcvr_polns * 2 * ftacc);
 
 
 	printf("Index step: %d\n", indxstep);
-	printf("bytes per subint %d\n",band[first_good_band].pf.sub.bytes_per_subint );
 	fflush(stdout);
 
 	fastspectra = (float**) malloc(fnchan * sizeof(float*));  
@@ -364,10 +289,10 @@ int main(int argc, char *argv[]) {
 	//array = malloc(1000 * sizeof *array);
 
 
-	startindx = band[first_good_band].gf.packetindex;
+	startindx = band[0].gf.packetindex;
 	curindx = startindx;
 	
-	filecnt = band[first_good_band].filecnt;
+	filecnt = band[0].filecnt;
 
 	for(i=0;i<8;i++) band[i].curfile = 0;			
 
@@ -383,10 +308,9 @@ int main(int argc, char *argv[]) {
 					  if(exists(filname)){
 						 printf("opening %s\n",filname);				
 						 band[j].fil = fopen(filname, "rb");			 
-						 if(band[j].curfile == 0 && band[j].first_file_skip != 0) fseek(band[j].fil, band[j].first_file_skip, SEEK_CUR);  
 					  }	else band[j].invalid = 1;
 				  }
-
+				  //printf("and here\n");
 				  if(band[j].fil){
 						if(fread(buf, sizeof(char), 32768, band[j].fil) == 32768) {
 						
@@ -465,21 +389,16 @@ int main(int argc, char *argv[]) {
 				  }			 	 	 
 			 }
 
-								
+						
+		
 		}
 		
-		
-
-
-		fprintf(stderr, "dumping to disk\n");
-
 		/* output one subint of accumulated spectra to filterbank file */
 		for(b=0;b<spectraperint;b++){
 			for(a = fnchan-1; a > -1; a--) {	 			 	 
 						   fwrite(&fastspectra[a][b],sizeof(float),1,partfil);			  
 			 }
 		}
-
 
 		//if (band[0].curfile == 1) {
 		//	fclose(partfil);
@@ -493,19 +412,14 @@ int main(int argc, char *argv[]) {
 	
 	
 
-	fprintf(stderr, "finishing up...\n");
+
+	fclose(partfil);
 
 	if(vflag>=1) fprintf(stderr, "bytes: %ld\n",by);
-	//if(vflag>=1) fprintf(stderr, "pos: %ld %d\n", ftell(fil),feof(fil));
+	if(vflag>=1) fprintf(stderr, "pos: %ld %d\n", ftell(fil),feof(fil));
 	
 	fclose(partfil);
-	fprintf(stderr, "closed output file...\n");
-
-	fftwf_destroy_plan(p);
-	fftwf_free(in); 
-	fftwf_free(out);
-	fprintf(stderr, "cleaned up FFTs...\n");
-
+	fclose(fil);
     exit(1);
 
 }
@@ -536,18 +450,17 @@ unsigned int quantval;
 long int bytes_per_chan;
 float samples[4096][4];
 
-
-        
+fftw_complex *in, *out;
+fftw_plan p;
+         
 bytes_per_chan =  pf->sub.bytes_per_subint/pf->hdr.nchan;
 
 /* buffer up one accumulation worth of complex samples */
-/* either detect and accumulate, or fft, detect and accumulate */
+/* either detect and accumulate, or fft and detect and accumulate */
 
-	 for(j = (ofst * pf->hdr.nchan * N); j < ((ofst+1) * pf->hdr.nchan * N); j = j + N) {	 			 	 
+	 for(j = (ofst * pf->hdr.nchan); j < ((ofst+1) * pf->hdr.nchan); j++) {	 			 	 
 		 for(k=0;k<spectraperint;k++){
-			  
- 			  for(i = 0; i < N; i++) fastspectra[j+i][k] = 0;
-
+ 			  fastspectra[j][k] = 0;
 			  for(i = 0; i < ftacc;i++) {
 				  /* sum FTACC dual pol complex samples */ 		
 				  for(a=0;a<4;a++){
@@ -558,56 +471,13 @@ bytes_per_chan =  pf->sub.bytes_per_subint/pf->hdr.nchan;
 
 					   //printf("%u\n", quantval);							
 							  
-					   //fitsval = quantlookup[quantval];
-					   samples[i][a] = quantlookup[quantval];
-					   
+					   fitsval = quantlookup[quantval];
+					   fastspectra[j][k] = fastspectra[j][k] + powf(fitsval,2);
 				  }
 			  }	
-
-		 	  for(a=0;a<ftacc;a=a+N){
-					 for(i=0;i<N;i++){
-						   in[i][0] = samples[i+a][0]; //real pol 0
-						   in[i][1] = samples[i+a][1]; //imag pol 0
-					 }	
-
-					 fftwf_execute(p); /*do the FFT for pol 0*/  
-
-					 
-					 for(i=0;i<N;i++){
-						 if(moment != 4) {						 
-							  fastspectra[j+i][k] = fastspectra[j+i][k] + powf(out[(i+N/2)%N][0],2) + powf(out[(i+N/2)%N][1],2);  /*real^2 + imag^2 for pol 0 */
-						 } else {
-							  fastspectra[j+i][k] = fastspectra[j+i][k] + powf((powf(out[(i+N/2)%N][1],2) + powf(out[(i+N/2)%N][1],2)),2);						 
-						 }
-					 }				
-					 
-					 for(i=0;i<N;i++){
-						   in[i][0] = samples[i+a][2]; //real pol 0
-						   in[i][1] = samples[i+a][3]; //imag pol 0
-					 }	
-
-					 fftwf_execute(p); /*do the FFT for pol 1*/  
-
-
-					 for(i=0;i<N;i++){
-						 if(moment != 4) {
-							  fastspectra[j+i][k] = fastspectra[j+i][k] + powf(out[(i+N/2)%N][0],2) + powf(out[(i+N/2)%N][1],2);  /*real^2 + imag^2 for pol 1 */
-						 } else {
-							  fastspectra[j+i][k] = fastspectra[j+i][k] + powf((powf(out[(i+N/2)%N][1],2) + powf(out[(i+N/2)%N][1],2)),2);						 
-						 }
-
-					 }						 
-
-
-			  }			 	  	
-
 		 }
 		 m++;
 	 }
-
-
-
-
 
 return 0;
 }

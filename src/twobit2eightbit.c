@@ -8,7 +8,6 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-
 /* Parse info from buffer into param struct */
 extern void guppi_read_obs_params(char *buf, 
                                      struct guppi_params *g,
@@ -84,7 +83,7 @@ int main(int argc, char *argv[]) {
     unsigned int quantval;
 
     if(argc < 3) {
-		fprintf(stderr, "USAGE: %s input.raw output.fits (use 'stdout' for output if stdout is desired)\n", argv[0]);
+		fprintf(stderr, "USAGE: %s input.raw output.fits (use 'stdout' for output if stdout is desired\n", argv[0]);
 		exit(1);
 	}
     
@@ -124,19 +123,14 @@ int main(int argc, char *argv[]) {
 
 		 guppi_read_obs_params(buf, &gf, &pf);
 	 
-		 fprintf(stderr, "nchan: %d\n", pf.hdr.nchan);    
+		 //printf("%d\n", pf.hdr.nchan);    
 		 fprintf(stderr, "size %d\n",pf.sub.bytes_per_subint + gethlength(buf));
 		 by = by + pf.sub.bytes_per_subint + gethlength(buf);
 		 fprintf(stderr, "mjd %Lf\n", pf.hdr.MJD_epoch);
 		 fprintf(stderr, "zen: %f\n\n", pf.sub.tel_zen);
-		 
-		 fprintf(stderr, "packetindex %Ld\n", gf.packetindex);
-		 fprintf(stderr, "packetsize: %d\n\n", gf.packetsize);
-		 fprintf(stderr, "n_packets %d\n", gf.n_packets);
-		 fprintf(stderr, "n_dropped: %d\n\n", gf.n_dropped);
 
 		 if (pf.sub.data) {
-		 	fprintf(stderr, "free pf.sub.data\n");
+		 	printf("boo sub\n");
 		 	fflush(stdout);
 		 	free(pf.sub.data);         
          }
@@ -144,7 +138,7 @@ int main(int argc, char *argv[]) {
 		 
 		 //need to allocate 4 bytes for each sample (float vals)
 		 if (fitsdata) {
-		 	fprintf(stderr, "free fitsdata\n");
+		 	printf("boo fits\n");
 			fflush(stdout);
 		 	free(fitsdata);         
 		 }
@@ -187,12 +181,12 @@ int main(int argc, char *argv[]) {
 					 
 					 printf("NBITS IS: %d\n", pf.hdr.nbits);
 					 //hputi4 (buf, "", pf.sub.bytes_per_subint/4);
-					 printf("wrote: %d\n",(int) fwrite(buf, sizeof(char), gethlength(buf), partfil));  //write header
+					 printf("wrote: %d\n",fwrite(buf, sizeof(char), gethlength(buf), partfil));  //write header
 					 z=0;
 
 
 					for(x=0;x < pf.sub.bytes_per_subint ;x=x+1) {
-							//printf("%d\n", (int) ((signed char) pf.sub.data[x]));
+//							printf("%d\n", (int) ((signed char) pf.sub.data[x]));
 						 	//printf("blah %d\n",z);
 						 	//z=x+1;
 
@@ -203,25 +197,22 @@ int main(int argc, char *argv[]) {
 								 quantval = quantval + (pf.sub.data[x] >> (a * 2) & 1);
 								 quantval = quantval + (2 * (pf.sub.data[x] >> (a * 2 + 1) & 1));
 																 
+								 //printf("%u\n", quantval);							
 								 
 								 fitsval = quantlookup[quantval];
+								 //printf("%f\n", fitsval);							
+								 //usleep(1000000);
 
 								 memcpy(&fitsdata[z], &fitsval, sizeof(float));						 	
 							     z = z + 4;									 
-								 printf("%f\n", fitsval);							
-								 usleep(100000);
-						
+								 //fprintf(stderr, "%u\n", quantval);
+								 //usleep(1000000);
 							 }
 						} else {						
 						 	fitsval = ((float) (signed char) pf.sub.data[x]) ;
 						 	memcpy(&fitsdata[z], &fitsval, sizeof(float));						 	
 							z = z + 4;
 						}	
-
-
-					 	//printf("%f\n", fitsval);							
-						//usleep(100000);
-
 							//printf("%f\n", fitsval);
 						 	//fitsval = (float) htonl((unsigned int) fitsval);
 							//printf("%f\n", fitsval);							
